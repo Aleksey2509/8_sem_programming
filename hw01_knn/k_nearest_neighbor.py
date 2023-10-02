@@ -99,7 +99,7 @@ class KNearestNeighbor:
             # Do not use np.linalg.norm().                                        #
             #######################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-            dists[i, :] = np.sqrt(np.add.reduce(np.square(np.tile(X[i], (num_train, 1)) - self.X_train)))
+            dists[i, :] = np.sqrt(np.add.reduce(np.square(np.tile(X[i], (num_train, 1)) - self.X_train), axis=1))
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
         return dists
@@ -128,9 +128,9 @@ class KNearestNeighbor:
         #       and two broadcast sums.                                         #
         #########################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-        X_squared = np.tile(np.add.reduce(X * X, 0), (num_train, 1))
-        X_train_squread = np.tile(np.add.reduce(self.X_train * self.X_train, 0), (num_test, 1)).transpose()
-        dists = np.sqrt(X_squared + X_train_squread  - 2 * X @ self.X_train.transpose()) 
+        X_squared = np.tile(np.add.reduce(X * X, 1), (num_train, 1)).transpose()
+        X_train_squared = np.tile(np.add.reduce(self.X_train * self.X_train, 1), (num_test, 1))
+        dists = np.sqrt(X_squared + X_train_squared  - 2 * X @ self.X_train.transpose()) 
 
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
@@ -162,7 +162,7 @@ class KNearestNeighbor:
             # Hint: Look up the function numpy.argsort.                             #
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-            closest_k_neightbours = y_train(np.argsort(dist[i, :])[:k])
+            closest_k_neightbours = self.y_train[np.argsort(dists[i, :])[:k]]
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
             #########################################################################
             # TODO:                                                                 #
@@ -172,7 +172,7 @@ class KNearestNeighbor:
             # label.                                                                #
             #########################################################################
             # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
-            labeled_as = np.argmax(np.bincount(closest_k_neightbours))
+            y_pred[i] = np.argmax(np.bincount(closest_k_neightbours))
 
             # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
