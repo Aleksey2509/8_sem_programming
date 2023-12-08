@@ -7,7 +7,6 @@
 #include <cstdlib>
 #include <memory>
 #include <atomic>
-#include <concepts>
 
 constexpr int BLOCK_SIZE = 128;
 
@@ -46,7 +45,6 @@ public:
     iterator end () {return content_.end();}
 
     template <typename it>
-    requires std::is_same_v<Matrix, typename std::iterator_traits<it>::value_type>
     static Matrix from2x2(it mat_begin, it mat_end)
     {
         auto&& rows = mat_begin->rows_num_;

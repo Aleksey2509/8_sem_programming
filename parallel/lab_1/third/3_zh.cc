@@ -1,28 +1,29 @@
-#include <omp.h>
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <chrono>
 #include <cmath>
+#include <unistd.h>
 
 #include "matrix.hh"
-#include "omp.h"
 #include <mpi.h>
+
+int rows_amount_for_rank(int rank, int world_size, int i_size)
+{
+    int rows_calc_amount = i_size / world_size;
+    if (i_size % world_size > rank)
+        rows_calc_amount++;
+
+    return rows_calc_amount;
+}
+
+ 
 
 int main(int argc, char* argv[])
 {
     MPI_Init(&argc, &argv);
     int i_size = 5000;
     int j_size = 5000;
-    int core_num = 2;
-
-    if (argc == 2)
-    {
-        core_num = std::atoi(argv[1]);
-    }
-    std::cerr << "got " << core_num << std::endl;
-
-    omp_set_num_threads(core_num);
 
     if (argc == 3)
     {
@@ -46,50 +47,118 @@ int main(int argc, char* argv[])
             b(i, j) = 0;
         }
     
-    auto&& start = std::chrono::high_resolution_clock::now();
-    #ifndef PAR
-    for (int i = 0; i < i_size; i++)
-       for (int j = 0; j < j_size; j++)
-       {
-           a(i, j) = sin(0.1 * a(i, j));
-       }
-    for (int i = 0; i < i_size - 1; i++)
-       for (int j = 2; j < j_size; j++)
-       {
-           b(i, j) = a(i + 1, j - 2) * 1.5;
-       }
-
-    #else
     int mpi_size{0};
     int mpi_rank{0};
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
-    #pragma omp parallel for num_threads(core_num)
-    for (int j = 0; j < j_size; j++)
-    {
-        a(0, j) = sin(0.1 * a(0, j));
-    }
-    #pragma omp parallel for collapse(2) num_threads(core_num)
-    for (int i = 1; i < i_size; i++)
-        for (int j = j_size - 2; j < j_size; j++)
-        {
-            a(i, j) = sin(0.1 * a(i, j));
-        }
-    
-    #pragma omp parallel for collapse(2) num_threads(core_num)
-    for (int i = 1; i < i_size; i++)
-       for (int j = 0; j < j_size - 2; j++)
+    double time = MPI_Wtime();
+    double* b_arr = b.data();
+    double* a_arr = a.data();
+    #ifndef PAR
+    for (int i = 0; i < i_size; i++)
+       for (int j = 0; j < j_size; j++)
        {
-           a(i, j) = sin(0.1 * a(i, j));
-           b(i - 1, j + 2) = a(i, j) * 1.5;
+           a_arr[i * j_size + j] = sin(0.1 * a_arr[i * j_size + j]);
+       }
+    for (int i = 0; i < i_size - 1; i++)
+       for (int j = 2; j < j_size; j++)
+       {
+           b_arr[i * j_size + j] = a_arr[(i + 1) * j_size + j - 2] * 1.5;
        }
 
+    #else
+    std::vector<MPI_Request> send_arr(i_size, MPI_REQUEST_NULL);
+    std::vector<MPI_Request> recv_arr(i_size, MPI_REQUEST_NULL);
+
+    for (int i = mpi_rank; i < i_size; i += mpi_size)
+    {
+       if ((i != i_size - 1))
+       {
+            if (mpi_rank != mpi_size - 1)
+                MPI_Irecv(a.data() + (i + 1) * j_size, j_size, MPI_DOUBLE, mpi_rank + 1, 0, MPI_COMM_WORLD, recv_arr.data() + i);
+            else
+                MPI_Irecv(a.data() + (i + 1) * j_size, j_size, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, recv_arr.data() + i);
+       }
+       for (int j = 0; j < j_size; j++)
+       {
+           // printf("rank %d at %d %d, a was %lf\n", mpi_rank, i, j, a(i, j));
+           a_arr[i * j_size + j] = sin(0.1 * a_arr[i * j_size + j]);
+           // printf("rank %d at %d %d, a now %lf\n", mpi_rank, i, j, a(i, j));
+       }
+
+       if (i != 0)
+       {
+           if (mpi_rank != 0)
+           {
+               double* a_line = a.data() + i * j_size;
+               // printf("rank %d sending to rank %d %lf %lf %lf %lf\n", mpi_rank, mpi_rank - 1, 
+               //        (a_line)[0], (a_line)[1], (a_line)[2], (a_line)[3] );
+               MPI_Isend(a.data() + i * j_size, j_size, MPI_DOUBLE, mpi_rank - 1, 0, MPI_COMM_WORLD, send_arr.data() + i);
+           }
+           else
+           {
+               double* a_line = a.data() + i * j_size;
+               // printf("rank %d sending to rank %d %lf %lf %lf %lf\n", mpi_rank, mpi_rank - 1, 
+               //        (a_line)[0], (a_line)[1], (a_line)[2], (a_line)[3] );
+               MPI_Isend(a.data() + i * j_size, j_size, MPI_DOUBLE, mpi_size - 1, 0, MPI_COMM_WORLD, send_arr.data() + i);
+           }
+       }
+       
+    }
+
+    for (int i = mpi_rank; i < i_size; i += mpi_size)
+    {
+        if (i != 0)
+            MPI_Wait(send_arr.data() + i, MPI_STATUS_IGNORE);
+        if (i != i_size - 1)
+            MPI_Wait(recv_arr.data() + i, MPI_STATUS_IGNORE);
+    }
+
+    // if (mpi_rank == 0)
+    // {
+    //     std::cout << "a as i: " << mpi_rank << " have it" << std::endl;
+    //     a.print();
+    // }
+
+
+    for (int i = mpi_rank; i < i_size - 1; i += mpi_size)
+       for (int j = 2; j < j_size; j++)
+       {
+           b_arr[i * j_size + j] = a_arr[(i + 1) * j_size + j - 2] * 1.5;
+       }
 
     #endif
-    auto&& end = std::chrono::high_resolution_clock::now();
-    auto&& passed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    std::cerr << "passed " << passed << std::endl;
+    if (mpi_rank == 0)
+        fprintf(stderr, "time: %lf\n", MPI_Wtime() - time);
+    
+    #ifdef PAR
+    for (int i = 0; (i < i_size) && (mpi_rank != 0); i++)
+    {
+        int rank_to_send = i % mpi_size;
+        if (rank_to_send != mpi_rank)
+            continue;
+        MPI_Send(b_arr + i * j_size, j_size, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+    }
+ 
+    for (int i = 0; (i < i_size) && (mpi_rank == 0); i++)
+    {
+        // printf("receving %d\n", i);
+        int rank_to_recv_from = i % mpi_size;
+        if (rank_to_recv_from == 0)
+            continue;
+        MPI_Recv(b_arr + i * j_size, j_size, MPI_DOUBLE, rank_to_recv_from, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        // printf("receved %d\n", i);
+    }
+    #endif
+    
+    FILE* dump_file;
+    if ((argc > 1) && (mpi_rank == 0))
+    {
+        dump_file = fopen(argv[1], "w");
+        fwrite(b_arr, sizeof(double), i_size * j_size, dump_file);
+        fclose(dump_file);
+    }
 
-    a.print();
+    MPI_Finalize();
 }

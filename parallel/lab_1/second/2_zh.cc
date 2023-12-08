@@ -18,7 +18,7 @@ int main(int argc, char* argv[])
     {
         thread_num = std::atoi(argv[1]);
     }
-    std::cerr << "got " << thread_num << std::endl;
+    // std::cerr << "got " << thread_num << std::endl;
 
     omp_set_num_threads(thread_num);
 
@@ -44,6 +44,7 @@ int main(int argc, char* argv[])
         }
     
     auto&& start = std::chrono::high_resolution_clock::now();
+    Matrix<double> b = a;
     #ifndef PAR
     for (int i = 0; i < i_size - 2; i++)
        for (int j = 3; j < j_size; j++)
@@ -51,7 +52,6 @@ int main(int argc, char* argv[])
            a(i, j) = sin(0.1 * a(i + 2, j - 3));
        }   
     #else
-    Matrix<double> b = a;
     #pragma omp parallel for collapse(2) num_threads(thread_num)
     for (int i = 0; i < i_size - 2; i++)
        for (int j = 3; j < j_size; j++)

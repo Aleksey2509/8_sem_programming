@@ -10,3 +10,17 @@ par: 2_zh.cc
 
 non_par: 2_zh.cc
 	$(CXX) $(CXXFLAGS) 2_zh.cc -o non_par
+
+run_par:
+	@echo 'Parallel'
+	./par 2 5000 5000 > par.txt
+
+run_non_par:
+	@echo 'Non parallel'
+	./non_par 2 5000 5000 > non_par.txt
+
+compare:
+	@echo 'Comparing'
+	diff par.txt non_par.txt
+
+run_all: par non_par run_par run_non_par compare
