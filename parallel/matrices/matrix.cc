@@ -10,19 +10,14 @@
 constexpr int MAT_SIZE = 512;
 
 template <typename Func>
-void check_method(Matrix<int>& A, Matrix<int>& B, Func f, Matrix<int>* C_orig = nullptr)
+void check_method(Func f)
 {
-    auto begin = std::chrono::high_resolution_clock::now();
+    auto A = Matrix<int>::rand_mat(MAT_SIZE, MAT_SIZE);
+    auto B = Matrix<int>::rand_mat(MAT_SIZE, MAT_SIZE);
+    auto C = basic_mult(A, B);
     auto result = f(A, B);
-    auto end = std::chrono::high_resolution_clock::now();
 
-    // std::cout << "Result" << std::endl;
-    // result.print();
-
-    std::cout << "Time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count() << std::endl;
-
-    if (C_orig)
-        std::cout << std::boolalpha << (result == *C_orig) << std::endl;
+    std::cout << std::boolalpha << (result == C) << std::endl;
 }
 template <typename Func>
 void time_method(int size, Func f)
@@ -140,7 +135,7 @@ int main(int argc, char* argv[])
     
     omp_set_num_threads(2);
 
-    time_method(size, strassen_mult<int>);
-    compare_par_nonpar(size);
-    // time_strassen(size);
+    // check_method(par_strassen_mult<int>);
+    time_method(size, par_strassen_mult<int>);
+    // compare_par_nonpar(size);
 }
